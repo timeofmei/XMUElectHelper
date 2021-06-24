@@ -1,0 +1,4 @@
+httpx==0.18.2
+PyExecJS==1.5.1
+lxml==4.6.3
+ujson==4.0.2
