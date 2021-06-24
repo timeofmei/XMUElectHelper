@@ -2,7 +2,10 @@ import httpx
 import os
 import base64
 import json
+import time
+import random
 import execjs
+import threading
 from lxml.etree import HTML
 
 class Student:
@@ -125,35 +128,47 @@ class Student:
             })
         self.classList = classList
         return self
-    
-    def findClass(self, className):
+
+
+    def addClass(self, className):
         for cl in self.classList:
             if cl["课程名"] == className:
-                self.add["headers"] = {
+                self.cracks.append({
+                    "课程名": className,
+                    "headers":  {
                     "Authorization": self.token,
                     "batchId": self.batchId,
-                }
-                self.add["params"] = {
+                },
+                "params": {
                     "clazzType": "FAWKC",
                     "clazzId": cl["授课信息"][0]["clazzId"],
                     "secretVal": cl["授课信息"][0]["secretVal"]
-                }
+                }})
                 return True
         return False
-    def crackClass(self):
-        className = input("课程名: ")
+
+
+    def crackWorker(self, headers, params, className):
         while True:
-            if self.findClass(className):
-                break
-            className = input("重新输入课程名: ")
-            
-        while True:
-            resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=self.add["headers"], params=self.add["params"]).json()
-            print(resp)
+            time.sleep(random.random())
+            resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
+            print(className + " " + resp["msg"])
             if resp["code"] == 200:
                 return True
-            elif resp["code"] == 401:
-                self.login()
+
+
+    def crackClass(self):
+        self.cracks = []
+        self.crackThreads = []
+        classNames = input("课程名, 用','分隔: ").split(",")
+        for className in classNames:
+            self.addClass(className)
+        for crack in self.cracks:
+            self.crackThreads.append(threading.Thread(target=self.crackWorker, kwargs={"headers": crack["headers"], "params": crack["params"], "className": crack["课程名"]}))
+        for thread in self.crackThreads:
+            thread.start()
+        for thread in self.crackThreads:
+            thread.join()
 
 
 if __name__ == "__main__":
@@ -165,5 +180,5 @@ if __name__ == "__main__":
     depName = input("学院: ")
     me.crawl("方案外课程", 1, campus, depName)
     for cls in me.classList:
-        print("- " +cls["课程名"])
+        print("- " + cls["课程名"])
     me.crackClass()
