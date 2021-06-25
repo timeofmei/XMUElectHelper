@@ -53,9 +53,8 @@ class Student:
         captchaUUID = captchaData["uuid"]
         captchaContent = captchaData["captcha"].split(",")[1]
         captchaBin = base64.b64decode(captchaContent)
-        f = open("captcha.jpg", "wb")
-        f.write(captchaBin)
-        f.close()
+        with open("captcha.jpg", "wb") as f:
+            f.write(captchaBin)
         captchaResult = input("验证码: ")
         os.remove("captcha.jpg")
         return (captchaUUID, captchaResult)
