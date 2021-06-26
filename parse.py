@@ -82,14 +82,16 @@ class Student:
         while True:
             try:
                 depName = input("学院: ")
+                depFound = False
                 for depOfficialName, depNo in self.depMap.items():
                     if depName in depOfficialName:
+                        depFound = True
                         break
-                raise KeyError
-            except KeyError:
-                continue
-            finally:
+                if not depFound:
+                    raise KeyError
                 break
+            except KeyError:
+                pass
         while True:
             try:
                 classType = self.classTypeMap[input("课程类型(推荐课程, 方案内课程, 方案外课程, 重修课程, 体育课, 校选课, 辅修课程)")]
