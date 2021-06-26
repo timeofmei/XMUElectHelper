@@ -9,28 +9,18 @@ import threading
 from lxml.etree import HTML
 
 class Student:
-    def __init__(self, xueHao, password):
+    def __init__(self):
         self.baseUrl = "http://xk.xmu.edu.cn"
-        self.add = {}
-        self.campusMap = {
-            "思明": 1,
-            "翔安": 6,
-            "漳州": 9
-        }
-        self.classTypeMap = {
-            "推荐课程": "TJKC",
-            "方案内课程": "FANKC",
-            "方案外课程": "FAWKC",
-            "重修课程": "CXKC",
-            "体育课": "TYKC",
-            "校选课": "XGKC",
-            "辅修课程": "FXKC",
-            "全校课程": "ALLKC",
-        }
-        self.xueHao = xueHao
-        self.password = self.encryptPassword(password)
-        with open("ZXYX.json") as ZXYX:
-            self.depdic = json.loads(ZXYX.read())
+        try:
+            self.connectionOK = httpx.get(self.baseUrl) == 200
+        except:
+            print("网不好/选课网站崩了, 没得办法")
+            self.connectionOK = False
+        with open("mappings.json") as ZXYX:
+            maps = json.loads(ZXYX.read())
+            self.campusMap = maps["campus"]
+            self.classTypeMap = maps["classType"]
+            self.depMap = maps["ZXYX"]
 
 
     def encryptPassword(self, password):
@@ -48,7 +38,7 @@ class Student:
         """).call("enc", password, aesKey)
 
 
-    def crackCaptcha(self):
+    def electCaptcha(self):
         captchaData = httpx.post(self.baseUrl + "/xsxkxmu/auth/captcha").json()["data"]
         captchaUUID = captchaData["uuid"]
         captchaContent = captchaData["captcha"].split(",")[1]
@@ -61,8 +51,10 @@ class Student:
 
 
     def login(self):
+        self.xueHao = input("学号: ")
+        self.password = self.encryptPassword(input("密码: "))
         while True:
-            captchaUUID, captchaResult = self.crackCaptcha()
+            captchaUUID, captchaResult = self.electCaptcha()
             loginData = {
                 "loginname": self.xueHao,
                 "password": self.password,
@@ -80,16 +72,36 @@ class Student:
                 print(login["msg"])
 
 
-    def crawl(self, classType, pageNumber, campus, depName):
-        campus = self.campusMap[campus]
-        if classType == "已选课程":
-            classUrl = "/xsxkxmu/volunteer/select"
-        else:
-            classType = self.classTypeMap[classType]
-            classUrl = "/xsxkxmu/elective/clazz/list"
-        for depOfficialName, depNo in self.depdic.items():
-            if depName in depOfficialName:
+    def getClassList(self):
+        while True:
+            try:
+                campus = self.campusMap[input("校区(思明, 翔安, 漳州): ")]
                 break
+            except KeyError:
+                pass
+        while True:
+            try:
+                depName = input("学院: ")
+                for depOfficialName, depNo in self.depMap.items():
+                    if depName in depOfficialName:
+                        break
+                raise KeyError
+            except KeyError:
+                continue
+            finally:
+                break
+        while True:
+            try:
+                classType = self.classTypeMap[input("课程类型(推荐课程, 方案内课程, 方案外课程, 重修课程, 体育课, 校选课, 辅修课程)")]
+                break
+            except KeyError:
+                pass
+        while True:
+            try:
+                pageNumber = int(input("页码: "))
+                break
+            except:
+                pass
         jsonParams = {
             "teachingClassType": classType,
             "pageNumber": pageNumber,
@@ -98,7 +110,7 @@ class Student:
             "campus": campus,
             "ZXYX": depNo
         }
-        resp = httpx.post(self.baseUrl + classUrl, headers={"Authorization": self.token}, json=jsonParams).json()
+        resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/list", headers={"Authorization": self.token}, json=jsonParams).json()
         if resp["code"] != 200:
             print(resp["msg"])
             return self
@@ -126,13 +138,15 @@ class Student:
                 "授课信息": tcInfos
             })
         self.classList = classList
+        for cls in self.classList:
+            print("- " + cls["课程名"])
         return self
 
 
     def addClass(self, className):
         for cl in self.classList:
             if cl["课程名"] == className:
-                self.cracks.append({
+                self.elects.append({
                     "课程名": className,
                     "headers":  {
                     "Authorization": self.token,
@@ -147,7 +161,7 @@ class Student:
         return False
 
 
-    def crackWorker(self, headers, params, className):
+    def electWorker(self, headers, params, className):
         while True:
             time.sleep(random.random())
             resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
@@ -156,28 +170,25 @@ class Student:
                 return True
 
 
-    def crackClass(self):
-        self.cracks = []
-        self.crackThreads = []
+    def electClass(self):
+        self.electList = []
+        electThreads = []
         classNames = input("课程名, 用','分隔: ").split(",")
         for className in classNames:
             self.addClass(className)
-        for crack in self.cracks:
-            self.crackThreads.append(threading.Thread(target=self.crackWorker, kwargs={"headers": crack["headers"], "params": crack["params"], "className": crack["课程名"]}))
-        for thread in self.crackThreads:
+        for election in self.electList:
+            electThreads.append(threading.Thread(target=self.electWorker, kwargs={
+                "headers": election["headers"], 
+                "params": election["params"], 
+                "className": election["课程名"]
+            }))
+        for thread in self.electThreads:
             thread.start()
-        for thread in self.crackThreads:
+        for thread in self.electThreads:
             thread.join()
 
 
 if __name__ == "__main__":
-    with open("loginInfo.json") as f:
-        loginInfo = json.loads(f.read())
-    me = Student(loginInfo["xueHao"], loginInfo["password"])
-    me.login()
-    campus = input("校区(思明, 翔安, 漳州): ")
-    depName = input("学院: ")
-    me.crawl("方案外课程", 1, campus, depName)
-    for cls in me.classList:
-        print("- " + cls["课程名"])
-    me.crackClass()
+    me = Student()
+    if me.connectionOK:
+        me.login().getClassList().electClass()
