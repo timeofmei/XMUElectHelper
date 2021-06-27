@@ -12,7 +12,7 @@ class Student:
     def __init__(self):
         self.baseUrl = "http://xk.xmu.edu.cn"
         try:
-            self.connectionOK = httpx.get(self.baseUrl) == 200
+            self.connectionOK = httpx.get(self.baseUrl).status_code == 200
         except:
             print("网不好/选课网站崩了, 没得办法")
             self.connectionOK = False
@@ -23,7 +23,7 @@ class Student:
             self.depMap = maps["ZXYX"]
 
 
-    def encryptPassword(self, password):
+    def _encryptPassword(self, password):
         loginPage = HTML(httpx.get(self.baseUrl + "/xsxkxmu/profile/index.html").text)
         self.batchId = loginPage.xpath("//body/script[7]/text()")[0].split(":")[1].split("\"")[1]
         aesKey = loginPage.xpath("//body/script[7]/text()")[0].split("\"")[-4]
@@ -38,7 +38,7 @@ class Student:
         """).call("enc", password, aesKey)
 
 
-    def electCaptcha(self):
+    def _electCaptcha(self):
         captchaData = httpx.post(self.baseUrl + "/xsxkxmu/auth/captcha").json()["data"]
         captchaUUID = captchaData["uuid"]
         captchaContent = captchaData["captcha"].split(",")[1]
@@ -52,9 +52,9 @@ class Student:
 
     def login(self):
         self.xueHao = input("学号: ")
-        self.password = self.encryptPassword(input("密码: "))
+        self.password = self._encryptPassword(input("密码: "))
         while True:
-            captchaUUID, captchaResult = self.electCaptcha()
+            captchaUUID, captchaResult = self._electCaptcha()
             loginData = {
                 "loginname": self.xueHao,
                 "password": self.password,
@@ -94,7 +94,7 @@ class Student:
                 pass
         while True:
             try:
-                classType = self.classTypeMap[input("课程类型(推荐课程, 方案内课程, 方案外课程, 重修课程, 体育课, 校选课, 辅修课程)")]
+                classType = self.classTypeMap[input("课程类型(推荐课程, 方案内课程, 方案外课程, 重修课程, 体育课, 校选课, 辅修课程): ")]
                 break
             except KeyError:
                 pass
@@ -145,10 +145,10 @@ class Student:
         return self
 
 
-    def addClass(self, className):
+    def _addClass(self, className):
         for cl in self.classList:
             if cl["课程名"] == className:
-                self.elects.append({
+                self.electList.append({
                     "课程名": className,
                     "headers":  {
                     "Authorization": self.token,
@@ -163,9 +163,9 @@ class Student:
         return False
 
 
-    def electWorker(self, headers, params, className):
+    def _electWorker(self, headers, params, className):
         while True:
-            time.sleep(random.random())
+            time.sleep(random.uniform(0.5, 1))
             resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
             print(className + " " + resp["msg"])
             if resp["code"] == 200:
@@ -173,21 +173,26 @@ class Student:
 
 
     def electClass(self):
-        self.electList = []
-        electThreads = []
-        classNames = input("课程名, 用','分隔: ").split(",")
-        for className in classNames:
-            self.addClass(className)
-        for election in self.electList:
-            electThreads.append(threading.Thread(target=self.electWorker, kwargs={
-                "headers": election["headers"], 
-                "params": election["params"], 
-                "className": election["课程名"]
-            }))
-        for thread in self.electThreads:
-            thread.start()
-        for thread in self.electThreads:
-            thread.join()
+        while True:
+            self.electList = []
+            electThreads = []
+            classNamesRaw = input("课程名, 用','或'，'分隔: ")
+            classNames = classNamesRaw.split("," if "," in classNamesRaw else "，")
+            if not classNames:
+                continue
+            for className in classNames:
+                self._addClass(className)
+            for election in self.electList:
+                electThreads.append(threading.Thread(target=self._electWorker, kwargs={
+                    "headers": election["headers"], 
+                    "params": election["params"], 
+                    "className": election["课程名"]
+                }))
+            for thread in electThreads:
+                thread.start()
+            for thread in electThreads:
+                thread.join()
+            break
 
 
 if __name__ == "__main__":
