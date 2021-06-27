@@ -8,6 +8,7 @@ import execjs
 import threading
 from lxml.etree import HTML
 
+
 class Student:
     def __init__(self):
         self.baseUrl = "http://xk.xmu.edu.cn"
@@ -137,6 +138,7 @@ class Student:
                 "学院": classInfo["KKDW"],
                 "性质": classInfo["KCXZ"],
                 "学时": classInfo["hours"],
+                "课程属性": depNo,
                 "授课信息": tcInfos
             })
         self.classList = classList
@@ -155,7 +157,7 @@ class Student:
                     "batchId": self.batchId,
                 },
                 "params": {
-                    "clazzType": "FAWKC",
+                    "clazzType": cl["课程属性"],
                     "clazzId": cl["授课信息"][0]["clazzId"],
                     "secretVal": cl["授课信息"][0]["secretVal"]
                 }})
@@ -166,7 +168,10 @@ class Student:
     def _electWorker(self, headers, params, className):
         while True:
             time.sleep(random.uniform(0.6, 0.8))
-            resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
+            try:
+                resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
+            except:
+                continue
             print(className + " " + resp["msg"])
             if resp["code"] == 200:
                 return True
