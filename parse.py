@@ -165,7 +165,7 @@ class Student:
 
     def _electWorker(self, headers, params, className):
         while True:
-            time.sleep(random.uniform(0.5, 1))
+            time.sleep(random.uniform(0.6, 0.8))
             resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
             print(className + " " + resp["msg"])
             if resp["code"] == 200:
