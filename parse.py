@@ -17,8 +17,8 @@ class Student:
         except:
             print("网不好/选课网站崩了, 没得办法")
             self.connectionOK = False
-        with open("mappings.json") as ZXYX:
-            maps = json.loads(ZXYX.read())
+        with open("mappings.json") as mappings:
+            maps = json.loads(mappings.read())
             self.campusMap = maps["campus"]
             self.classTypeMap = maps["classType"]
             self.depMap = maps["ZXYX"]
@@ -138,7 +138,7 @@ class Student:
                 "学院": classInfo["KKDW"],
                 "性质": classInfo["KCXZ"],
                 "学时": classInfo["hours"],
-                "课程属性": depNo,
+                "课程属性": classType,
                 "授课信息": tcInfos
             })
         self.classList = classList
@@ -169,11 +169,11 @@ class Student:
         while True:
             time.sleep(random.uniform(0.6, 0.8))
             try:
-                resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
+                result = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
             except:
                 continue
-            print(className + " " + resp["msg"])
-            if resp["code"] == 200:
+            print(className + " " + result["msg"])
+            if result["code"] == 200:
                 return True
 
 
