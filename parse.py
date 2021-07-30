@@ -1,5 +1,6 @@
 import httpx
 import os
+import getpass
 import base64
 import json
 import time
@@ -22,6 +23,7 @@ class Student:
             self.campusMap = maps["campus"]
             self.classTypeMap = maps["classType"]
             self.depMap = maps["ZXYX"]
+            self.classList = []
 
 
     def _encryptPassword(self, password):
@@ -52,25 +54,30 @@ class Student:
 
 
     def login(self):
-        self.xueHao = input("学号: ")
-        self.password = self._encryptPassword(input("密码: "))
         while True:
-            captchaUUID, captchaResult = self._electCaptcha()
-            loginData = {
-                "loginname": self.xueHao,
-                "password": self.password,
-                "captcha": captchaResult,
-                "uuid": captchaUUID
-            }
-            login = httpx.post(self.baseUrl + "/xsxkxmu/auth/login", data=loginData).json()
-            if login["code"] == 200:
-                print("登录成功")
-                self.stuData = login["data"]
-                self.stuInfo = self.stuData["student"]
-                self.token = self.stuData["token"]
-                return self
-            else:
-                print(login["msg"])
+            self.xueHao = input("学号: ").strip()
+            if len(self.xueHao) != 14:
+                continue
+            self.password = self._encryptPassword(getpass.getpass("密码: ")).strip()
+            while True:
+                captchaUUID, captchaResult = self._electCaptcha()
+                loginData = {
+                    "loginname": self.xueHao,
+                    "password": self.password,
+                    "captcha": captchaResult,
+                    "uuid": captchaUUID
+                }
+                login = httpx.post(self.baseUrl + "/xsxkxmu/auth/login", data=loginData).json()
+                if login["code"] == 200:
+                    print("登录成功")
+                    self.stuData = login["data"]
+                    self.stuInfo = self.stuData["student"]
+                    self.token = self.stuData["token"]
+                    return self
+                else:
+                    print(login["msg"])
+                    if login["msg"] == "用户不存在/密码错误":
+                        break
 
 
     def getClassList(self):
@@ -94,56 +101,62 @@ class Student:
             except KeyError:
                 pass
         while True:
-            try:
-                classType = self.classTypeMap[input("课程类型(推荐课程, 方案内课程, 方案外课程, 重修课程, 体育课, 校选课, 辅修课程): ")]
-                break
-            except KeyError:
-                pass
-        while True:
-            try:
-                pageNumber = int(input("页码: "))
-                break
-            except:
-                pass
-        jsonParams = {
-            "teachingClassType": classType,
-            "pageNumber": pageNumber,
-            "pageSize": 10,
-            "orderBy": "",
-            "campus": campus,
-            "ZXYX": depNo
-        }
-        resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/list", headers={"Authorization": self.token}, json=jsonParams).json()
-        if resp["code"] != 200:
-            print(resp["msg"])
-            return self
-        classData = resp["data"]
-        classList = []
-        for classInfo in classData["rows"]:
-            tcInfos = []
-            for tcInfo in classInfo["tcList"]:
-                tcInfos.append({
-                    "clazzId": tcInfo["JXBID"],
-                    "secretVal": tcInfo["secretVal"],
-                    "教师": tcInfo["SKJS"],
-                    "容量": tcInfo["classCapacity"],
-                    "已报第一志愿": tcInfo["numberOfFirstVolunteer"],
-                    "已选中人数": tcInfo["numberOfSelected"],
-                    "上课地点时间": tcInfo["teachingPlace"],
-                    "上课校区": tcInfo["XQ"]
+            while True:
+                try:
+                    classType = self.classTypeMap[input("课程类型(推荐课程, 方案内课程, 方案外课程, 重修课程, 体育课, 校选课, 辅修课程): ")]
+                    break
+                except KeyError:
+                    pass
+            while True:
+                try:
+                    pageNumber = int(input("页码: "))
+                    break
+                except:
+                    pass
+            jsonParams = {
+                "teachingClassType": classType,
+                "pageNumber": pageNumber,
+                "pageSize": 10,
+                "orderBy": "",
+                "campus": campus,
+                "ZXYX": depNo
+            }
+            resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/list", headers={"Authorization": self.token}, json=jsonParams).json()
+            if resp["code"] != 200:
+                print(resp["msg"])
+                return self
+            classData = resp["data"]
+            classList = []
+            for classInfo in classData["rows"]:
+                tcInfos = []
+                for tcInfo in classInfo["tcList"]:
+                    keys = list(tcInfo.keys())
+                    tcInfos.append({
+                        "clazzId": tcInfo["JXBID"],
+                        "secretVal": tcInfo["secretVal"],
+                        "教师": tcInfo["SKJS"],
+                        "容量": tcInfo["classCapacity"],
+                        "已报第一志愿": tcInfo["numberOfFirstVolunteer"],
+                        "已选中人数": tcInfo["numberOfSelected"],
+                        "上课地点时间": tcInfo["teachingPlace"] if "teachingPlace" in keys else "",
+                        "上课校区": tcInfo["XQ"]
+                    })
+                classList.append({
+                    "课程名": classInfo["KCM"],
+                    "类别": classInfo["KCLB"],
+                    "学院": classInfo["KKDW"],
+                    "性质": classInfo["KCXZ"],
+                    "学时": classInfo["hours"],
+                    "课程属性": classType,
+                    "授课信息": tcInfos
                 })
-            classList.append({
-                "课程名": classInfo["KCM"],
-                "类别": classInfo["KCLB"],
-                "学院": classInfo["KKDW"],
-                "性质": classInfo["KCXZ"],
-                "学时": classInfo["hours"],
-                "课程属性": classType,
-                "授课信息": tcInfos
-            })
-        self.classList = classList
-        for cls in self.classList:
-            print("- " + cls["课程名"])
+            self.classList.extend(classList)
+            for cls in self.classList:
+                print("- " + cls["课程名"])
+                for tcInfo in cls["授课信息"]:
+                    print("   ", tcInfo["教师"], tcInfo["已选中人数"] + "/" + tcInfo["容量"])
+            if input("\n是否选择其他页面课程?(y/n)").strip() in ['n', 'N', 'no', 'No', 'NO', 'nO', '否', '0']:
+                break
         return self
 
 
@@ -181,8 +194,8 @@ class Student:
         while True:
             self.electList = []
             electThreads = []
-            classNamesRaw = input("课程名, 用','或'，'分隔: ")
-            classNames = classNamesRaw.split("," if "," in classNamesRaw else "，")
+            classNamesRaw = input("课程名, 用' '分隔: ")
+            classNames = classNamesRaw.split(" ")
             if not classNames:
                 continue
             for className in classNames:
