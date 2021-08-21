@@ -2,7 +2,6 @@ import httpx
 import os
 import getpass
 import base64
-import json
 import time
 import random
 import execjs
@@ -11,22 +10,37 @@ from lxml.etree import HTML
 
 class Student:
     def __init__(self):
-        self.baseUrl = "http://xk.xmu.edu.cn"
-        self.loggedIn = False
-        self.cancelList = ['n', 'N', 'no', 'No', 'NO', 'nO', '否', '0']
-        self.dashLine = "\n" + "-" * 30 + "\n"
         try:
             print("-" * 30 + "\n")
             print("正在进行网络测试")
             self.connectionOK = httpx.get(self.baseUrl).status_code == 200
-            print("网络正常")
+            if self.connectionOK:
+                print("网络正常")
+            else:
+                print("网不好/选课网站崩了, 没得办法")
             print(self.dashLine)
         except:
-            print("网不好/选课网站崩了, 没得办法")
             self.connectionOK = False
-        with open("mappings.json") as mappings:
-            maps = json.loads(mappings.read())
-            self.classTypes = maps["classType"]
+            print("网不好/选课网站崩了, 没得办法")
+        self.baseUrl = "http://xk.xmu.edu.cn"
+        self.loggedIn = False
+        self.cancelList = ['n', 'N', 'no', 'No', 'NO', 'nO', '否', '0']
+        self.classList = []
+        self.dashLine = "\n" + "-" * 30 + "\n"
+        self.campus = 1
+        self.authInfo = {
+            "Authorization": "",
+            "batchId": ""
+        }
+        self.classTypes = {
+            "本专业计划课程": "TJKC",
+            "本专业其他年级课程": "FANKC",
+            "方案外课程": "FAWKC",
+            "重修课程": "CXKC",
+            "体育/大学英语课程": "TYKC",
+            "校选课": "XGKC",
+            "辅修课程": "FX"
+        }
 
 
     def _encryptPassword(self, password):
@@ -58,15 +72,15 @@ class Student:
 
     def login(self):
         while True:
-            self.xueHao = input("学号: ").strip()
-            if len(self.xueHao) != 14:
+            xueHao = input("学号: ").strip()
+            if len(xueHao) != 14:
                 continue
-            self.password = self._encryptPassword(getpass.getpass("密码: ")).strip()
+            password = self._encryptPassword(getpass.getpass("密码: ")).strip()
             while True:
                 captchaUUID, captchaResult = self._getCaptcha()
                 loginData = {
-                    "loginname": self.xueHao,
-                    "password": self.password,
+                    "loginname": xueHao,
+                    "password": password,
                     "captcha": captchaResult,
                     "uuid": captchaUUID
                 }
@@ -77,18 +91,15 @@ class Student:
                     print(self.dashLine)
                     self.loggedIn = True
                     stuData = login["data"]
-                    stuInfo = stuData["student"]
-                    self.campus = int(stuInfo["campus"])
-                    batchList = [{"name": batch["name"], "code": batch["code"]} for batch in stuInfo["electiveBatchList"]]
+                    self.campus = int(stuData["student"]["campus"])
+                    batchList = [{"name": batch["name"], "code": batch["code"]} for batch in stuData["student"]["electiveBatchList"]]
                     for i, batch in enumerate(batchList):
                         print(f"{i+1}. {batch['name']}")
                     while True:
                         try:
                             batchNo = int(input("\n选课批次编号: "))
-                            self.authInfo = {
-                                "Authorization": stuData["token"],
-                                "batchId": batchList[batchNo - 1]["code"],
-                            }
+                            self.authInfo["Authorization"] = stuData["token"]
+                            self.authInfo["batchId"] = batchList[batchNo - 1]["code"]
                             print(self.dashLine)
                             return self
                         except:
@@ -102,7 +113,6 @@ class Student:
     def getClassList(self):
         if not self.loggedIn:
             return self
-        self.classList = []
         while True:
             while True:
                 try:
@@ -147,10 +157,6 @@ class Student:
                 for tcInfo in classInfo["tcList"]:
                     classList.append({
                         "课程名": classInfo["KCM"],
-                        "类别": classInfo["KCLB"],
-                        "学院": classInfo["KKDW"],
-                        "性质": classInfo["KCXZ"],
-                        "学时": classInfo["hours"],
                         "课程属性": classType,
                         "clazzId": tcInfo["JXBID"],
                         "secretVal": tcInfo["secretVal"],
@@ -173,7 +179,7 @@ class Student:
 
     def _addClass(self, classId):
         cl = self.classList[classId - 1]
-        self.electList.append({
+        return {
             "课程名": cl["课程名"],
             "教师": cl["教师"],
             "上课时间地点": cl["上课时间地点"],
@@ -183,7 +189,7 @@ class Student:
             "clazzId": cl["clazzId"],
             "secretVal": cl["secretVal"],
             "chooseVolunteer": 1
-        }})
+        }}
 
 
     def _electWorker(self, headers, params, className):
@@ -204,7 +210,7 @@ class Student:
         if not self.loggedIn or self.classList == []:
             return self
         while True:
-            self.electList = []
+            electList = []
             electThreads = []
             classIds = input("课程编号, 用' '分隔: ").split(" ")
             if not classIds:
@@ -215,21 +221,21 @@ class Student:
                     if id > len(self.classList) or id <= 0:
                         print(f"课程 {id} 不存在")
                         raise IndexError
-                    self._addClass(id)
+                    electList.append(self._addClass(id))
                 except:
                     continue
             print(self.dashLine)
-            if self.electList == []:
+            if electList == []:
                 continue
             print("选课列表: ")
-            for i, election in enumerate(self.electList):
+            for i, election in enumerate(electList):
                 print(f"{i+1}. {election['课程名']} {election['教师']} {election['上课时间地点']}")
             if input("\n待选课程是否正确(y/n):") in self.cancelList:
                 continue
             print(self.dashLine)
             print("开始选课")
             print(self.dashLine)
-            for election in self.electList:
+            for election in electList:
                 electThreads.append(threading.Thread(target=self._electWorker, kwargs={
                     "headers": election["headers"], 
                     "params": election["params"], 
