@@ -10,6 +10,7 @@ from lxml.etree import HTML
 
 class Student:
     def __init__(self):
+        self.baseUrl = "http://xk.xmu.edu.cn"
         try:
             print("-" * 30 + "\n")
             print("正在进行网络测试")
@@ -22,7 +23,6 @@ class Student:
         except:
             self.connectionOK = False
             print("网不好/选课网站崩了, 没得办法")
-        self.baseUrl = "http://xk.xmu.edu.cn"
         self.loggedIn = False
         self.cancelList = ['n', 'N', 'no', 'No', 'NO', 'nO', '否', '0']
         self.classList = []
