@@ -1,11 +1,11 @@
-import httpx
-import os
-import getpass
-import base64
-import time
-import random
-import execjs
-import threading
+from httpx import get, post
+from os import remove
+from getpass import getpass
+from base64 import b64decode
+from time import sleep
+from random import uniform
+from execjs import compile
+from threading import Thread
 from lxml.etree import HTML
 
 class Student:
@@ -36,7 +36,7 @@ class Student:
         print("-" * 30 + "\n")
         print("正在进行网络测试")
         try:
-            if httpx.get(self.baseUrl).status_code == 200:
+            if get(self.baseUrl).status_code == 200:
                 print("网络正常")
                 print(self.dashLine)
                 return True
@@ -48,11 +48,10 @@ class Student:
             return False
             
 
-
     def _encryptPassword(self, password):
-        loginPage = HTML(httpx.get(self.baseUrl + "/xsxkxmu/profile/index.html").text)
+        loginPage = HTML(get(self.baseUrl + "/xsxkxmu/profile/index.html").text)
         aesKey = loginPage.xpath("//body/script[7]/text()")[0].split("\"")[-4]
-        return execjs.compile(r"""
+        return compile(r"""
         function enc(password, aesKey) {
             const CryptoJS = require("crypto-js");
             return CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(password), CryptoJS.enc.Utf8.parse(aesKey), {
@@ -65,15 +64,71 @@ class Student:
 
     def _getCaptcha(self):
         print("正在获取验证码")
-        captchaData = httpx.post(self.baseUrl + "/xsxkxmu/auth/captcha").json()["data"]
+        captchaData = post(self.baseUrl + "/xsxkxmu/auth/captcha").json()["data"]
         captchaUUID = captchaData["uuid"]
         captchaContent = captchaData["captcha"].split(",")[1]
-        captchaBin = base64.b64decode(captchaContent)
+        captchaBin = b64decode(captchaContent)
         with open("captcha.jpg", "wb") as f:
             f.write(captchaBin)
         captchaResult = input("验证码: ")
-        os.remove("captcha.jpg")
-        return (captchaUUID, captchaResult)
+        remove("captcha.jpg")
+        return captchaUUID, captchaResult
+
+
+    def _getClassType(self):
+        while True:
+            try:
+                classTypeNames = list(self.classTypes)
+                for i, classType in enumerate(classTypeNames):
+                    print(f"{i+1}. {classType}")
+                classTypeStr = input("\n课程类型编号: ")
+                classTypeNo = int(classTypeStr)
+                classType = self.classTypes[classTypeNames[classTypeNo - 1]]
+                return classType
+            except:
+                print(f"课程类型 {classTypeStr} 不存在")
+                continue
+
+
+    def _getPageNo(self):
+        while True:
+            try:
+                pageStr = input("页码: ")
+                pageNo = int(pageStr)
+                if pageNo <= 0:
+                    raise IndexError
+                return pageNo
+            except:
+                print(f"页码 {pageStr} 无效")
+                continue
+
+
+    def _addClass(self, classId):
+        cl = self.classList[classId - 1]
+        return {
+            "课程名": cl["课程名"],
+            "教师": cl["教师"],
+            "上课时间地点": cl["上课时间地点"],
+            "headers": self.authInfo,
+            "params": {
+            "clazzType": cl["课程属性"],
+            "clazzId": cl["clazzId"],
+            "secretVal": cl["secretVal"]
+        }}
+
+
+    def _electWorker(self, headers, params, className):
+        i = 0
+        while True:
+            sleep(uniform(0.7, 0.9))
+            try:
+                result = post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
+                i += 1
+            except:
+                continue
+            print(f"{className} 第 {i} 次尝试 {result['msg']}")
+            if result["code"] == 200 or result["msg"] == "该课程已在选课结果中" or result["msg"] == "所选课程与已选课程冲突":
+                break
 
 
     def login(self):
@@ -81,7 +136,7 @@ class Student:
             xueHao = input("学号: ").strip()
             if len(xueHao) != 14:
                 continue
-            password = self._encryptPassword(getpass.getpass("密码: ")).strip()
+            password = self._encryptPassword(getpass("密码: ").strip())
             while True:
                 captchaUUID, captchaResult = self._getCaptcha()
                 loginData = {
@@ -91,7 +146,7 @@ class Student:
                     "uuid": captchaUUID
                 }
                 print("正在登录")
-                login = httpx.post(self.baseUrl + "/xsxkxmu/auth/login", data=loginData).json()
+                login = post(self.baseUrl + "/xsxkxmu/auth/login", data=loginData).json()
                 if login["code"] == 200:
                     print("登录成功")
                     print(self.dashLine)
@@ -114,34 +169,6 @@ class Student:
                     print("\n" + login["msg"])
                     if login["msg"] == "用户不存在/密码错误":
                         break
-    
-
-    def _getClassType(self):
-        while True:
-            try:
-                classTypeNames = list(self.classTypes)
-                for i, classType in enumerate(classTypeNames):
-                    print(f"{i+1}. {classType}")
-                classTypeStr = input("\n课程类型编号: ")
-                classTypeNo = int(classTypeStr)
-                classType = self.classTypes[classTypeNames[classTypeNo - 1]]
-                return classType
-            except:
-                print(f"课程类型 {classTypeStr} 不存在")
-                continue
-    
-
-    def _getPageNo(self):
-        while True:
-            try:
-                pageStr = input("页码: ")
-                pageNo = int(pageStr)
-                if pageNo <= 0:
-                    raise IndexError
-                return pageNo
-            except:
-                print(f"页码 {pageStr} 无效")
-                continue
 
 
     def getClassList(self):
@@ -158,7 +185,7 @@ class Student:
                 "campus": self.campus
             }
             print("正在获取课程列表")
-            resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/list", headers=self.authInfo, json=jsonParams).json()
+            resp = post(self.baseUrl + "/xsxkxmu/elective/clazz/list", headers=self.authInfo, json=jsonParams).json()
             if resp["code"] != 200:
                 print(resp["msg"])
                 if resp["code"] == 401:
@@ -194,34 +221,6 @@ class Student:
         return self
 
 
-    def _addClass(self, classId):
-        cl = self.classList[classId - 1]
-        return {
-            "课程名": cl["课程名"],
-            "教师": cl["教师"],
-            "上课时间地点": cl["上课时间地点"],
-            "headers": self.authInfo,
-            "params": {
-            "clazzType": cl["课程属性"],
-            "clazzId": cl["clazzId"],
-            "secretVal": cl["secretVal"]
-        }}
-
-
-    def _electWorker(self, headers, params, className):
-        i = 0
-        while True:
-            time.sleep(random.uniform(0.7, 0.9))
-            try:
-                result = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/add", headers=headers, params=params).json()
-                i += 1
-            except:
-                continue
-            print(f"{className} 第 {i} 次尝试 {result['msg']}")
-            if result["code"] == 200 or result["msg"] == "该课程已在选课结果中" or result["msg"] == "所选课程与已选课程冲突":
-                break
-
-
     def electClass(self):
         if not self.loggedIn or self.classList == []:
             return self
@@ -248,7 +247,7 @@ class Student:
             print("开始选课")
             print(self.dashLine)
             for election in electList:
-                electThreads.append(threading.Thread(target=self._electWorker, kwargs={
+                electThreads.append(Thread(target=self._electWorker, kwargs={
                     "headers": election["headers"], 
                     "params": election["params"], 
                     "className": election["课程名"]
