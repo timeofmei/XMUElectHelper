@@ -16,6 +16,7 @@ class Student:
         self.cancelList = ['n', 'N', 'no', 'No', 'NO', 'nO', '否', '0']
         self.classList = []
         self.campus = 1
+        self.connectionOK = self._testConnection()
         self.authInfo = {
             "Authorization": "",
             "batchId": ""
@@ -29,18 +30,23 @@ class Student:
             "校选课": "XGKC",
             "辅修课程": "FX"
         }
+
+    
+    def _testConnection(self):
+        print("-" * 30 + "\n")
+        print("正在进行网络测试")
         try:
-            print("-" * 30 + "\n")
-            print("正在进行网络测试")
-            self.connectionOK = httpx.get(self.baseUrl).status_code == 200
-            if self.connectionOK:
+            if httpx.get(self.baseUrl).status_code == 200:
                 print("网络正常")
+                print(self.dashLine)
+                return True
             else:
-                print("网不好/选课网站崩了, 没得办法")
-            print(self.dashLine)
+                raise ConnectionError
         except:
-            self.connectionOK = False
             print("网不好/选课网站崩了, 没得办法")
+            print(self.dashLine)
+            return False
+            
 
 
     def _encryptPassword(self, password):
@@ -108,32 +114,42 @@ class Student:
                     print("\n" + login["msg"])
                     if login["msg"] == "用户不存在/密码错误":
                         break
+    
+
+    def _getClassType(self):
+        while True:
+            try:
+                classTypeNames = list(self.classTypes)
+                for i, classType in enumerate(classTypeNames):
+                    print(f"{i+1}. {classType}")
+                classTypeStr = input("\n课程类型编号: ")
+                classTypeNo = int(classTypeStr)
+                classType = self.classTypes[classTypeNames[classTypeNo - 1]]
+                return classType
+            except:
+                print(f"课程类型 {classTypeStr} 不存在")
+                continue
+    
+
+    def _getPageNo(self):
+        while True:
+            try:
+                pageStr = input("页码: ")
+                pageNo = int(pageStr)
+                if pageNo <= 0:
+                    raise IndexError
+                return pageNo
+            except:
+                print(f"页码 {pageStr} 无效")
+                continue
 
 
     def getClassList(self):
         if not self.loggedIn:
             return self
         while True:
-            while True:
-                try:
-                    classTypeNames = list(self.classTypes)
-                    for i, classType in enumerate(classTypeNames):
-                        print(f"{i+1}. {classType}")
-                    classTypeNo = int(input("\n课程类型编号: "))
-                    classType = self.classTypes[classTypeNames[classTypeNo - 1]]
-                    break
-                except Exception as e:
-                    print(e)
-                    print(f"课程类型 {classTypeNo} 不存在")
-                    continue
-            while True:
-                try:
-                    pageNo = int(input("页码: "))
-                    if pageNo <= 0:
-                        raise IndexError
-                    break
-                except:
-                    continue
+            classType = self._getClassType()
+            pageNo = self._getPageNo()
             jsonParams = {
                 "teachingClassType": classType,
                 "pageNumber": pageNo,
@@ -141,6 +157,7 @@ class Student:
                 "orderBy": "",
                 "campus": self.campus
             }
+            print("正在获取课程列表")
             resp = httpx.post(self.baseUrl + "/xsxkxmu/elective/clazz/list", headers=self.authInfo, json=jsonParams).json()
             if resp["code"] != 200:
                 print(resp["msg"])
@@ -167,9 +184,9 @@ class Student:
                         "已选中人数": tcInfo["numberOfSelected"]
                     })
             self.classList.extend(classList)
-            for i, cls in enumerate(self.classList):
-                selectedNum = cls['已选中人数'] if cls['已选中人数'] != 0 else cls["已报第一志愿"]
-                print(f"{i+1}. {cls['课程名']} {cls['教师']} {selectedNum}/{cls['容量']} {cls['上课时间地点']}")
+            for i, cl in enumerate(self.classList):
+                selectedNum = cl['已选中人数'] if cl['已选中人数'] != 0 else cl["已报第一志愿"]
+                print(f"{i+1}. {cl['课程名']} {cl['教师']} {selectedNum}/{cl['容量']} {cl['上课时间地点']}")
             continueLoading = input("\n是否加载其他页面课程(y/n): ").strip()
             print(self.dashLine)
             if continueLoading in self.cancelList:
@@ -187,8 +204,7 @@ class Student:
             "params": {
             "clazzType": cl["课程属性"],
             "clazzId": cl["clazzId"],
-            "secretVal": cl["secretVal"],
-            "chooseVolunteer": 2
+            "secretVal": cl["secretVal"]
         }}
 
 
@@ -213,8 +229,6 @@ class Student:
             electList = []
             electThreads = []
             classIds = input("课程编号, 用' '分隔: ").split(" ")
-            if not classIds:
-                continue
             for classId in classIds:
                 try:
                     id = int(classId)
@@ -225,8 +239,6 @@ class Student:
                 except:
                     continue
             print(self.dashLine)
-            if electList == []:
-                continue
             print("选课列表: ")
             for i, election in enumerate(electList):
                 print(f"{i+1}. {election['课程名']} {election['教师']} {election['上课时间地点']}")
