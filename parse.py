@@ -11,22 +11,10 @@ from lxml.etree import HTML
 class Student:
     def __init__(self):
         self.baseUrl = "http://xk.xmu.edu.cn"
-        try:
-            print("-" * 30 + "\n")
-            print("正在进行网络测试")
-            self.connectionOK = httpx.get(self.baseUrl).status_code == 200
-            if self.connectionOK:
-                print("网络正常")
-            else:
-                print("网不好/选课网站崩了, 没得办法")
-            print(self.dashLine)
-        except:
-            self.connectionOK = False
-            print("网不好/选课网站崩了, 没得办法")
+        self.dashLine = "\n" + "-" * 30 + "\n"
         self.loggedIn = False
         self.cancelList = ['n', 'N', 'no', 'No', 'NO', 'nO', '否', '0']
         self.classList = []
-        self.dashLine = "\n" + "-" * 30 + "\n"
         self.campus = 1
         self.authInfo = {
             "Authorization": "",
@@ -41,6 +29,18 @@ class Student:
             "校选课": "XGKC",
             "辅修课程": "FX"
         }
+        try:
+            print("-" * 30 + "\n")
+            print("正在进行网络测试")
+            self.connectionOK = httpx.get(self.baseUrl).status_code == 200
+            if self.connectionOK:
+                print("网络正常")
+            else:
+                print("网不好/选课网站崩了, 没得办法")
+            print(self.dashLine)
+        except:
+            self.connectionOK = False
+            print("网不好/选课网站崩了, 没得办法")
 
 
     def _encryptPassword(self, password):
@@ -188,7 +188,7 @@ class Student:
             "clazzType": cl["课程属性"],
             "clazzId": cl["clazzId"],
             "secretVal": cl["secretVal"],
-            "chooseVolunteer": 1
+            "chooseVolunteer": 2
         }}
 
 
@@ -230,7 +230,7 @@ class Student:
             print("选课列表: ")
             for i, election in enumerate(electList):
                 print(f"{i+1}. {election['课程名']} {election['教师']} {election['上课时间地点']}")
-            if input("\n待选课程是否正确(y/n):") in self.cancelList:
+            if input("\n待选课程是否正确(y/n): ") in self.cancelList:
                 continue
             print(self.dashLine)
             print("开始选课")
