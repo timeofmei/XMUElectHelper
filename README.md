@@ -1,5 +1,3 @@
-# 厦门大学新选课系统爬虫
+# 厦门大学新选课系统选课助手
 
-http://xk.xmu.edu.cn
-
-爬虫demo, 仅图一乐
+选课网址：http://xk.xmu.edu.cn
